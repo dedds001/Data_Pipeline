@@ -1,0 +1,22 @@
+
+import requests
+
+url = "https://bucket-name.s3.amazonaws.com/ot_db/top_product_markup.csv.gz"
+
+headers = {
+    'Host': "bucket-name.s3.amazonaws.com",
+    'X-Amz-Content-Sha256': "'content",
+    'X-Amz-Date': "date",
+    'Authorization': "authkey, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature='signature'",
+    'User-Agent': "PostmanRuntime/7.15.0",
+    'Accept': "*/*",
+    'Cache-Control': "no-cache",
+    'Postman-Token': "token",
+    'accept-encoding': "gzip, deflate",
+    'Connection': "keep-alive",
+    'cache-control': "no-cache"
+    }
+
+response = requests.request("GET", url, headers=headers)
+
+print(response.text)
