@@ -215,7 +215,8 @@ copy into contacts
 
 
 --4. Write the queries from Oracle/SQL assignments.
--------observation:  for some reason manager_id came in as a string with a decimal point.  I decided to leave it and not reload the table because there was only one query dealing with it---
+-------observation:  for some reason manager_id came in as a string with a decimal point. 
+-------I decided to leave it and not reload the table because I only had one query that used it.
 
 --Table1
 SELECT emp.Employee_First_Name
@@ -237,10 +238,11 @@ LEFT JOIN employees m ON emp.man_id = m.employee_id;
 
 SELECT DISTINCT c.name, c.credit_limit
 FROM customers c 
-WHERE c.credit_limit > (
-
+WHERE c.credit_limit > 
+(
 SELECT AVG( c.credit_limit) as Average_Credit_Limit
-FROM customers c)
+FROM customers c
+)
 ORDER BY c.credit_limit DESC;
 
 --Table3
@@ -285,8 +287,7 @@ JOIN products p on i.product_id = p.product_id
 GROUP BY w.warehouse_name
 ORDER BY Total_Value DESC;
 
-5. Output of queries ( whichever query generates output ) export into S3 from Snowflake
-create tables of the output
+5. Output of queries ( whichever query generates output ) export into S3 from Snowflake create tables of the output
 
 ---Create tables to aid in export of queries----
 
@@ -370,7 +371,7 @@ ORDER BY Total_Inventory DESC
 
 --Create staging area and file format
 create or replace file format my_csv_format
-  type = csv field_optionally_enclosed_by='"' skip_header = 1 null_if = ('unknown', 'null') compression=gzip;
+  type = csv field_optionally_enclosed_by='"' skip_header = 1 null_if = ('unknown', 'null');
 
 
 create or replace stage my_s3_unload_stage url='s3://bucket-name/ot_db'
@@ -476,7 +477,7 @@ Either retrieve from S3 using 'get' request or get straight from snowsql to csv
 snowsql -c example -q 'select * from customers_4plus_orders' -o output_format=csv -o header=true -o timing=false -o friendly=false  > customers_4plus_orders.csv
 mv country_warehouse_inventory.csv /Users/deborahedds/Downloads/ot_db/country_warehouse_inventory.csv
 --------------
-If getting directly from s3 via python requests, you may need to deal with compression issues 
+-----If getting directly from s3 via python requests, you may need to deal with compression issues 
 ---------------
 6. Create a basic data Visualization ( graphs ) using the data available on s3 from step 5.
 
