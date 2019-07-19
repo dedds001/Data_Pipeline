@@ -514,10 +514,10 @@ great_cred['credit_band']=great_cred['CREDIT_LIMIT'].apply(lambda x:
     else "2000-3499" if 2000<=x<3500
     else "0-1999" if x<2000
     else "miss")
-gred_cred_band=great_cred[['NAME', 'credit_band']].groupby('credit_band').count().reset_index()
+great_cred_band=great_cred[['NAME', 'credit_band']].groupby('credit_band').count().reset_index()
 
 from matplotlib import pyplot as plt
-plt.bar(gred_cred_band['credit_band'], gred_cred_band['NAME'])
+plt.bar(great_cred_band['credit_band'], great_cred_band['NAME'])
 plt.xlabel('Credit_band')
 plt.ylabel('Count')
 
