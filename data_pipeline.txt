@@ -1,0 +1,524 @@
+
+BeCloudReady DataPipeline project
+
+Prepare a Data Pipeline based in aforesaid diagram. Do following steps
+
+1. Extract the data from Oracle RDS instance
+
+Data extracted as tables via developer export into tsv files
+
+2. Upload the data to your S3 bucket using Python ( or using Postman )
+
+"""Edit formatting and put into S3 bucket"""
+
+import pandas as pd 
+import os
+
+
+os.getcwd()
+os.chdir('/Users/deborahedds/Downloads')
+f='/Users/deborahedds/Downloads/ot_db/employees.tsv'
+data = pd.read_csv('/Users/deborahedds/Downloads/ot_db/employees.tsv',delimiter='\t',encoding='utf-8')
+
+list1= ['warehouses', 'regions', 'products','product_categories','orders','order_items','locations','inventories','customers','countries','contacts']
+list2=[]
+for x in list1:
+    data= f.replace('employees', x)
+    data1=pd.read_csv(data, delimiter='\t',encoding='utf-8' )
+    d=data1.columns
+    string1= "create or replace table "+ x +" ( "
+    for i in d:
+        string1+=i +'  string ,'
+    string2=string1[:-1] + ');'    
+    list2.append(string2)
+    data1.to_csv(str(x)+'.csv', index = False)
+for x in list2:
+    print(x)
+
+
+"""use put command from postman to put on s3"""
+
+
+import requests
+
+url = "https://bucket-name.s3.amazonaws.com/ot_db/warehouses.csv"
+
+headers = {
+    'X-Amz-Content-Sha256': "45fad46ab97380f5dd2a9c7b119d14bf2bd6645b9e3123f7dcd65c06f503cf39",
+    'Host': "s3bucket",
+    'X-Amz-Date': "20190719T010818Z",
+    'Authorization': "AWS4-HMAC-SHA256 Credential=accesskeys, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=secret key",
+    'Content-Type': "text/plain",
+    'User-Agent': "PostmanRuntime/7.15.0",
+    'Accept': "*/*",
+    'Cache-Control': "no-cache",
+    'Postman-Token': "bfc538bf-917e-40a0-96a0-8711b5dda8a5,b19f6278-7200-4fe2-9a9f-a0875ff3cefc",
+    'accept-encoding': "gzip, deflate",
+    'content-length': "188",
+    'Connection': "keep-alive",
+    'cache-control': "no-cache"
+    }
+
+response = requests.request("PUT", url, headers=headers)
+
+
+
+
+print(response.text)
+
+"""(Repeat for each table)"""
+
+3. Import the data into Snowflake from the s3 bucket
+
+
+
+-------SNOWSQL--------------------
+----Create new database
+create or replace database ot_db;
+
+select current_database(), current_schema();
+
+----Create new table
+
+create or replace table employees ( 
+    EMPLOYEE_ID  string ,
+    FIRST_NAME  string ,
+    LAST_NAME  string ,
+    EMAIL  string ,
+    PHONE  string ,
+    HIRE_DATE  date ,
+    MANAGER_ID  string ,
+    JOB_TITLE  string ); 
+
+
+----Create new warehouse
+
+create or replace warehouse otdb_wh with
+  warehouse_size='X-SMALL'
+  auto_suspend = 180
+  auto_resume = true
+  initially_suspended=true;
+
+create or replace file format my_csv_format
+  type = csv field_optionally_enclosed_by='"' skip_header = 1 null_if = ('unknown', 'null') ;
+
+
+create or replace stage my_s3_stage url='s3://bucket-name/ot_db'
+  CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  --file_format = (type = csv field_optionally_enclosed_by='"' header= True);
+  file_format = my_csv_format;
+
+copy into employees
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*ot_emp.csv'
+  on_error = 'skip_file';
+
+
+
+--CREATE THE REST OF THE TABLES  
+create or replace table warehouses ( WAREHOUSE_ID  string ,WAREHOUSE_NAME  string ,LOCATION_ID  string );
+create or replace table regions ( REGION_ID  string ,REGION_NAME  string );
+create or replace table products ( PRODUCT_ID  string ,PRODUCT_NAME  string ,DESCRIPTION  string ,STANDARD_COST  number ,LIST_PRICE  number ,CATEGORY_ID  string );
+create or replace table product_categories ( CATEGORY_ID  string ,CATEGORY_NAME  string );
+create or replace table orders ( ORDER_ID  string ,CUSTOMER_ID  string ,STATUS  string ,SALESMAN_ID  string ,ORDER_DATE  date );
+create or replace table order_items ( ORDER_ID  string ,ITEM_ID  string ,PRODUCT_ID  string ,QUANTITY  number ,UNIT_PRICE  number );
+create or replace table locations ( LOCATION_ID  string ,ADDRESS  string ,POSTAL_CODE  string ,CITY  string ,STATE  string ,COUNTRY_ID  string );
+create or replace table inventories ( PRODUCT_ID  string ,WAREHOUSE_ID  string ,QUANTITY  number );
+create or replace table customers ( CUSTOMER_ID  string ,NAME  string ,ADDRESS  string ,WEBSITE  string ,CREDIT_LIMIT  string );
+create or replace table countries ( COUNTRY_ID  string ,COUNTRY_NAME  string ,REGION_ID  string );
+create or replace table contacts ( CONTACT_ID  string ,FIRST_NAME  string ,LAST_NAME  string ,EMAIL  string ,PHONE  string ,CUSTOMER_ID  string );
+
+
+
+
+/*CREATE staging area and move into tables*/
+create or replace stage my_s3_stage url='s3://bucket-name/ot_db'
+  CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = (type = csv field_optionally_enclosed_by='"');
+
+copy into warehouses
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*warehouses.csv'
+  on_error = 'skip_file';
+
+  ---
+
+
+copy into regions
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*regions.csv'
+  on_error = 'skip_file';
+
+
+copy into products
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*products.csv'
+  on_error = 'skip_file';
+
+
+
+copy into product_categories
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*product_categories.csv'
+  on_error = 'skip_file';
+
+
+
+copy into orders
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*orders.csv'
+  on_error = 'skip_file';
+
+
+
+copy into order_items
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*order_items.csv'
+  on_error = 'skip_file';
+
+copy into locations
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*locations.csv'
+  on_error = 'skip_file';
+
+copy into inventories
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*inventories.csv'
+  on_error = 'skip_file';
+
+copy into customers
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*customers.csv'
+  on_error = 'skip_file';
+
+copy into countries
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*countries.csv'
+  on_error = 'skip_file';
+
+copy into contacts
+  from s3://bucket-name/ot_db CREDENTIALS = (AWS_KEY_ID = 'accesskey' AWS_SECRET_KEY = 'secretkey')
+  file_format = my_csv_format
+  pattern = '.*contacts.csv'
+  on_error = 'skip_file';
+
+
+--4. Write the queries from Oracle/SQL assignments.
+-------observation:  for some reason manager_id came in as a string with a decimal point.  I decided to leave it and not reload the table because there was only one query dealing with it---
+
+--Table1
+SELECT emp.Employee_First_Name
+, emp.Employee_Last_Name
+, emp.Man_id
+, m.first_name Manager_first_name
+, m.last_name Manager_Last_name
+FROM 
+(
+SELECT e.first_name Employee_First_Name
+, e.last_name Employee_Last_Name
+, e.manager_id -SUBSTR(e.manager_id, -2) as man_id
+FROM employees e 
+) emp
+LEFT JOIN employees m ON emp.man_id = m.employee_id;
+
+
+--Table2
+
+SELECT DISTINCT c.name, c.credit_limit
+FROM customers c 
+WHERE c.credit_limit > (
+
+SELECT AVG( c.credit_limit) as Average_Credit_Limit
+FROM customers c)
+ORDER BY c.credit_limit DESC;
+
+--Table3
+SELECT c.name, c.customer_id, COUNT( DISTINCT o.order_id) num_orders
+FROM customers c 
+JOIN orders o ON c.customer_id = o.customer_id
+GROUP BY c.name, c.customer_id
+HAVING COUNT(o.order_id) > 4;
+
+
+--Table4
+SELECT pc.category_name, AVG(p.standard_cost) avg_cost
+FROM product_categories pc 
+JOIN products p ON pc.category_id = p.category_id
+WHERE pc.category_name = 'CPU'
+GROUP BY pc.category_name;
+
+--Table5
+SELECT p.product_name, ROUND((p.list_price-p.standard_cost)/p.standard_cost*100, 2) Percent_markup
+FROM product_categories pc 
+JOIN products p ON pc.category_id = p.category_id
+WHERE pc.category_name = 'CPU'
+ORDER BY percent_markup DESC
+LIMIT 10
+;
+
+--Table6
+SELECT c.country_name, w.warehouse_name, SUM(i.quantity) Total_Inventory
+FROM countries c
+JOIN locations l ON l.country_id =c.country_id
+JOIN warehouses w on l.location_id = w.location_id
+JOIN inventories i on w.warehouse_id = i.warehouse_id
+GROUP BY 
+ROLLUP(c.country_name, w.warehouse_name)
+ORDER BY Total_Inventory DESC;
+
+--Table7
+SELECT w.warehouse_name, SUM(i.quantity*p.standard_cost) Total_Value
+FROM warehouses w 
+JOIN inventories i on w.warehouse_id = i.warehouse_id
+JOIN products p on i.product_id = p.product_id
+GROUP BY w.warehouse_name
+ORDER BY Total_Value DESC;
+
+5. Output of queries ( whichever query generates output ) export into S3 from Snowflake
+create tables of the output
+
+---Create tables to aid in export of queries----
+
+CREATE table top_product_markup as (
+SELECT p.product_name
+, ROUND((p.list_price-p.standard_cost)/p.standard_cost*100, 2) Percent_markup
+FROM product_categories pc 
+JOIN products p ON pc.category_id = p.category_id
+WHERE pc.category_name = 'CPU'
+ORDER BY percent_markup DESC
+LIMIT 10
+);
+
+CREATE table average_cpu_cost as (
+SELECT pc.category_name
+, AVG(p.standard_cost) avg_cost
+FROM product_categories pc 
+JOIN products p ON pc.category_id = p.category_id
+WHERE pc.category_name = 'CPU'
+GROUP BY pc.category_name
+);
+
+CREATE table customers_4plus_orders as (
+SELECT c.name
+, c.customer_id
+, COUNT( DISTINCT o.order_id) num_orders
+FROM customers c 
+JOIN orders o ON c.customer_id = o.customer_id
+GROUP BY c.name, c.customer_id
+HAVING COUNT(o.order_id) > 4
+);
+
+CREATE table greater_than_avg_credit as (
+SELECT DISTINCT c.name
+, c.credit_limit
+FROM customers c 
+WHERE c.credit_limit > (
+SELECT AVG( c.credit_limit) as Average_Credit_Limit
+FROM customers c
+)
+ORDER BY c.credit_limit DESC
+);
+
+CREATE table employee_and_manager as (
+SELECT emp.Employee_First_Name
+, emp.Employee_Last_Name
+, emp.Man_id
+, m.first_name Manager_first_name
+, m.last_name Manager_Last_name
+FROM 
+(
+SELECT e.first_name Employee_First_Name
+, e.last_name Employee_Last_Name
+, e.manager_id -SUBSTR(e.manager_id, -2) as man_id
+FROM employees e 
+) emp
+LEFT JOIN employees m ON emp.man_id = m.employee_id
+);
+
+CREATE table warehouse_value as (
+SELECT w.warehouse_name, SUM(i.quantity*p.standard_cost) Total_Value
+FROM warehouses w 
+JOIN inventories i on w.warehouse_id = i.warehouse_id
+JOIN products p on i.product_id = p.product_id
+GROUP BY w.warehouse_name
+ORDER BY Total_Value DESC
+);
+
+CREATE table country_warehouse_inventory as (
+SELECT c.country_name, w.warehouse_name, SUM(i.quantity) Total_Inventory
+FROM countries c
+JOIN locations l ON l.country_id =c.country_id
+JOIN warehouses w on l.location_id = w.location_id
+JOIN inventories i on w.warehouse_id = i.warehouse_id
+GROUP BY 
+ROLLUP(c.country_name, w.warehouse_name)
+ORDER BY Total_Inventory DESC
+);
+
+------------
+
+--Create staging area and file format
+create or replace file format my_csv_format
+  type = csv field_optionally_enclosed_by='"' skip_header = 1 null_if = ('unknown', 'null') compression=gzip;
+
+
+create or replace stage my_s3_unload_stage url='s3://bucket-name/ot_db'
+  CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+  --file_format = (type = csv field_optionally_enclosed_by='"' header= True);
+  file_format = my_csv_format;
+
+
+COPY into @my_s3_unload_stage FROM country_warehouse_inventory;
+
+
+COPY INTO 's3://bucket-name/ot_db/country_warehouse_inventory.csv.gz'
+FROM ot_db..country_warehouse_inventory
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+----------------------------------------------
+
+COPY into @my_s3_unload_stage FROM warehouse_value Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/warehouse_value.csv.gz'
+FROM ot_db..warehouse_value
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+------------------------------------------------
+
+
+COPY into @my_s3_unload_stage FROM employee_and_manager
+Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/employee_and_manager.csv.gz'
+FROM ot_db..employee_and_manager
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+
+---------------------------------------
+COPY into @my_s3_unload_stage FROM greater_than_avg_credit
+Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/greater_than_avg_credit.csv.gz'
+FROM ot_db..greater_than_avg_credit
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+-----------------------------------------
+
+COPY into @my_s3_unload_stage FROM customers_4plus_orders
+Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/customers_4plus_orders.csv.gz'
+FROM ot_db..customers_4plus_orders
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+
+----------------------------------
+
+COPY into @my_s3_unload_stage FROM average_cpu_cost
+Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/average_cpu_cost.csv.gz'
+FROM ot_db..average_cpu_cost
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+
+----------------------------------
+COPY into @my_s3_unload_stage FROM top_product_markup
+Overwrite = True;
+
+
+COPY INTO 's3://bucket-name/ot_db/top_product_markup.csv.gz'
+FROM ot_db..top_product_markup
+FILE_FORMAT = my_csv_format
+CREDENTIALS = (AWS_KEY_ID = 'access key' AWS_SECRET_KEY = 'secret key')
+OVERWRITE=TRUE
+SINGLE=TRUE;
+
+
+-----------
+Either retrieve from S3 using 'get' request or get straight from snowsql to csv
+----------------------------------
+--Direct to csv from snowsql---
+snowsql -c example -q 'select * from customers_4plus_orders' -o output_format=csv -o header=true -o timing=false -o friendly=false  > customers_4plus_orders.csv
+mv country_warehouse_inventory.csv /Users/deborahedds/Downloads/ot_db/country_warehouse_inventory.csv
+--------------
+If getting directly from s3 via python requests, you may need to deal with compression issues 
+---------------
+6. Create a basic data Visualization ( graphs ) using the data available on s3 from step 5.
+
+
+import pandas as pd 
+import requests
+import os
+import csv
+
+os.chdir('/Users/deborahedds/Downloads/ot_db')
+
+cwi = pd.read_csv('country_warehouse_inventory.csv', skiprows=1)
+wv =pd.read_csv('warehouse_value.csv')    
+cm = pd.read_csv('employee_and_manager.csv')
+great_cred = pd.read_csv('greater_than_avg_credit.csv')
+cust_4plus_ord = pd.read_csv('customers_4plus_orders.csv')
+tpm = pd.read_csv('top_product_markup.csv')
+
+
+
+"""Horizontal Bar Graph showing the percent markup of the top ten markup products"""
+from matplotlib import pyplot as plt
+plt.barh(tpm['PRODUCT_NAME'], tpm['PERCENT_MARKUP'])
+plt.xlabel("PRODUCT_NAME")
+plt.ylabel("PERCENT_MARKUP")
+
+
+
+"""great_cred credit bands"""
+
+great_cred['credit_band']=great_cred['CREDIT_LIMIT'].apply(lambda x:
+    "5000" if x==5000
+    else "3500-4999" if 3500<=x<5000
+    else "2000-3499" if 2000<=x<3500
+    else "0-1999" if x<2000
+    else "miss")
+gred_cred_band=great_cred[['NAME', 'credit_band']].groupby('credit_band').count().reset_index()
+
+from matplotlib import pyplot as plt
+plt.bar(gred_cred_band['credit_band'], gred_cred_band['NAME'])
+plt.xlabel('Credit_band')
+plt.ylabel('Count')
+
+
+7. Publish the whole code into Github. 
