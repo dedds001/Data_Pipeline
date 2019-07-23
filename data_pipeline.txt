@@ -1,7 +1,8 @@
 
 BeCloudReady DataPipeline project
 
-Prepare a Data Pipeline based in aforesaid diagram. Do following steps
+This version of the project uses the requests library from python to put and get files from the s3 bucket.  
+
 
 1. Extract the data from Oracle RDS instance
 
@@ -14,7 +15,7 @@ Data extracted as tables via developer export into tsv files
 import pandas as pd 
 import os
 
-
+##files were downloaded as tsv files 
 os.getcwd()
 os.chdir('/Users/deborahedds/Downloads')
 f='/Users/deborahedds/Downloads/ot_db/employees.tsv'
@@ -36,7 +37,7 @@ for x in list2:
     print(x)
 
 
-"""use put command from postman to put on s3"""
+"""use 'put' command from postman to put on s3"""
 
 
 import requests
@@ -73,6 +74,7 @@ print(response.text)
 
 
 -------SNOWSQL--------------------
+--connect to snowsql via command line 
 ----Create new database
 create or replace database ot_db;
 
